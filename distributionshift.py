@@ -18,6 +18,8 @@ __all__ = [
     "layer_report",
     "analyze_model",
     "find_bottlenecks",
+    "spectrum_distance",
+    "shift_report",
 ]
 
 
@@ -78,3 +80,53 @@ def find_bottlenecks(reports: dict, top_k: int = 1) -> list:
         raise ValueError("top_k must be >= 1")
     ranked = sorted(reports.items(), key=lambda kv: (kv[1]["effective_rank"], kv[0]))
     return [name for name, _ in ranked[:top_k]]
+
+
+def spectrum_distance(baseline: np.ndarray, candidate: np.ndarray, bins: int = 16) -> float:
+    """Distance between the singular-value spectra of two matrices.
+
+    Both spectra are log-transformed, normalized to unit sum, and compared
+    on ``bins`` evenly spaced quantile points. Scale differences between
+    matrices are ignored; only the shape of the decay is compared.
+
+    Returns a float >= 0. 0.0 means identical spectral shape.
+    """
+    s1 = layer_spectrum(baseline)
+    s2 = layer_spectrum(candidate)
+    if s1.size == 0 or s2.size == 0:
+        raise ValueError("inputs must be non-empty 2-D matrices")
+    if bins < 2:
+        raise ValueError("bins must be >= 2")
+
+    def _profile(s: np.ndarray) -> np.ndarray:
+        log_s = np.log1p(s)
+        quantiles = np.linspace(0.0, 1.0, bins)
+        profile = np.quantile(log_s, quantiles)
+        total = float(np.abs(profile).sum())
+        return profile / total if total > 0 else profile
+
+    return float(np.abs(_profile(s1) - _profile(s2)).sum())
+
+
+def shift_report(baseline_layers: dict, candidate_layers: dict, bins: int = 16) -> dict:
+    """Layer-by-layer spectral shift between two representation sets.
+
+    Args:
+        baseline_layers: dict {layer_name: 2-D matrix} from the baseline.
+        candidate_layers: dict {layer_name: 2-D matrix} from the candidate.
+        bins: quantile bins for spectrum_distance.
+
+    Returns dict {layer_name: distance} for layers present in both, plus
+    a "most_shifted" key naming the layer with the largest distance.
+    """
+    if not baseline_layers or not candidate_layers:
+        raise ValueError("both layer dicts must be non-empty")
+    common = sorted(set(baseline_layers) & set(candidate_layers))
+    if not common:
+        raise ValueError("no common layer names between the two sets")
+    distances = {
+        name: spectrum_distance(baseline_layers[name], candidate_layers[name], bins=bins)
+        for name in common
+    }
+    distances["most_shifted"] = max(common, key=lambda n: distances[n])
+    return distances
