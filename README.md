@@ -1,42 +1,54 @@
 # DistributionShift
 
-Layer-wise spectral analysis for deep networks.
+[![CI](https://github.com/kapildhinwa2010-dev/DistributionShift/actions/workflows/ci.yml/badge.svg)](https://github.com/kapildhinwa2010-dev/DistributionShift/actions/workflows/ci.yml)
+[![CI](https://github.com/kapildhinwa2010-dev/DistributionShift/actions/workflows/codeql.yml/badge.svg)](https://github.com/kapildhinwa2010-dev/DistributionShift/actions/workflows/codeql.yml)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
+Detect distribution shift between two layer sets by comparing singular-value spectra.
 
 **Part of the [Kapildhinwa2010-dev Toolkit](https://github.com/kapildhinwa2010-dev/Kapildhinwa2010-dev).**
 
-![CI](https://github.com/kapildhinwa2010-dev/DistributionShift/actions/workflows/ci.yml/badge.svg)
-![CodeQL](https://github.com/kapildhinwa2010-dev/DistributionShift/actions/workflows/codeql.yml/badge.svg)
-![Python](https://img.shields.io/badge/python-3.9%2B-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
+## What it does
 
-## ✨ Features
+For each layer name present in two sets of matrices (e.g. weights or
+activation covariances before and after a data change),
+spectrum_distance() compares the shapes of their singular-value
+spectra: log-transformed, scale-normalized, quantile-binned, then
+sum-of-absolute-differences. shift_report() runs this per layer and
+names the most-shifted layer. The base spectral API (effective rank,
+condition number, bottleneck ranking) is shared with BottleneckTest.
 
-- Singular-value spectra and effective rank per layer
-- Condition numbers and bottleneck ranking
-- `analyze_model()` reports every layer at once
+## Install
 
-## 📦 Install
+    pip install -r requirements.txt
 
-```bash
-pip install -r requirements.txt
-```
+## Quick start
 
-## 🚀 Quick start
+    from distributionshift import shift_report
 
-```python
-from distributionshift import analyze_model, find_bottlenecks
+    report = shift_report(baseline_layers, candidate_layers)
+    print(report["most_shifted"], report[report["most_shifted"]])
 
-layers = {'a': np.eye(16), 'b': low_rank_matrix}
-reports = analyze_model(layers)
-print(find_bottlenecks(reports, top_k=1))
-```
+## API
 
-## 🧪 Tests
+- layer_spectrum, effective_rank, layer_report, analyze_model,
+  find_bottlenecks (shared spectral base)
+- spectrum_distance(baseline, candidate, bins=16) - float >= 0
+- shift_report(baseline_layers, candidate_layers, bins=16) - per-layer
+  distances plus most_shifted
 
-```bash
-pytest tests/ -v
-```
+## Honest results and limitations
 
-## 📄 License
+- The distance compares only the SHAPE of the spectral decay; overall
+  scale differences are deliberately ignored. Two matrices that differ
+  by a constant factor score 0.0.
+- A high distance says the spectra differ, not why, and not whether
+  task accuracy changed. No accuracy evaluation is included.
+- Layers are matched by name; renamed or new layers are silently
+  skipped (only common names are compared).
+- Quantile binning (default 16) smooths fine spectral detail.
 
-MIT — see [LICENSE](LICENSE).
+## License
+
+MIT - see [LICENSE](LICENSE).
