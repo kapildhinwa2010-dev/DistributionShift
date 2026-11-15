@@ -99,7 +99,10 @@ def spectrum_distance(baseline: np.ndarray, candidate: np.ndarray, bins: int = 1
         raise ValueError("bins must be >= 2")
 
     def _profile(s: np.ndarray) -> np.ndarray:
-        log_s = np.log1p(s)
+        # Normalize by max BEFORE log so scaling the matrix leaves the
+        # profile unchanged: log(c*s / c*s_max) == log(s / s_max).
+        s_norm = s / s.max()
+        log_s = np.log1p(s_norm)
         quantiles = np.linspace(0.0, 1.0, bins)
         profile = np.quantile(log_s, quantiles)
         total = float(np.abs(profile).sum())
