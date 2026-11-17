@@ -1,55 +1,84 @@
 # DistributionShift
 
-[![CI](https://github.com/kapildhinwa2010-dev/DistributionShift/actions/workflows/ci.yml/badge.svg)](https://github.com/kapildhinwa2010-dev/DistributionShift/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/kapildhinwa2010-dev/DistributionShift/actions/workflows/codeql.yml/badge.svg)](https://github.com/kapildhinwa2010-dev/DistributionShift/actions/workflows/codeql.yml)
+DistributionShift is a small Python library for comparing singular-value spectra of named two-dimensional matrices. It reports per-layer spectral differences between two sets of matrices and includes basic spectral summaries and bottleneck ranking.
 
-[![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+## Status and scope
 
-Detect distribution shift between two layer sets by comparing singular-value spectra.
+The repository contains a single Python module (version 0.1.0), packaging metadata, and a focused test suite. It operates on matrices supplied by the caller; it does not load a model, collect activations, determine whether a dataset has shifted, or evaluate downstream task performance. Treat its output as a comparison of matrix spectra, not as a general measure of model or data-distribution change.
 
-**Part of the [Kapildhinwa2010-dev Toolkit](https://github.com/kapildhinwa2010-dev/Kapildhinwa2010-dev).**
+## Features
 
-## What it does
+- Compute singular values for a two-dimensional matrix.
+- Summarize a matrix with its shape, Frobenius norm, spectral norm, condition number, and effective rank.
+- Summarize named matrices and rank their layers by effective rank.
+- Compare the spectral profiles of two matrices with `spectrum_distance`.
+- Compare matrices under common layer names with `shift_report`, which also identifies the common layer with the largest distance.
 
-For each layer name present in two sets of matrices (e.g. weights or
-activation covariances before and after a data change),
-spectrum_distance() compares the shapes of their singular-value
-spectra: log-transformed, scale-normalized, quantile-binned, then
-sum-of-absolute-differences. shift_report() runs this per layer and
-names the most-shifted layer. The base spectral API (effective rank,
-condition number, bottleneck ranking) is shared with BottleneckTest.
+For the distance, each matrix's singular values are divided by their maximum, transformed with `log1p`, sampled at evenly spaced quantiles (16 by default), and normalized before an L1 difference is calculated. Consequently, uniform scaling is intentionally ignored. `effective_rank` uses the default threshold of 0.99 of the sum of singular values (not squared singular-value energy).
 
-## Install
+## Requirements and installation
 
-    pip install -r requirements.txt
+Python 3.9 or newer and NumPy 1.24 or newer are declared project requirements. From a checkout of this repository, install the project with:
 
-## Quick start
+```bash
+python -m pip install .
+```
 
-    from distributionshift import shift_report
+To install the dependencies used for development and tests instead, run:
 
-    report = shift_report(baseline_layers, candidate_layers)
-    print(report["most_shifted"], report[report["most_shifted"]])
+```bash
+python -m pip install -r requirements.txt
+```
+
+## Example
+
+```python
+import numpy as np
+from distributionshift import shift_report
+
+baseline = {
+    "encoder": np.eye(4),
+    "projection": np.diag([4.0, 2.0, 1.0, 0.5]),
+}
+candidate = {
+    "encoder": np.eye(4),
+    "projection": np.diag([4.0, 1.0, 0.25, 0.1]),
+}
+
+report = shift_report(baseline, candidate)
+print(report)  # Per-common-layer distances and the "most_shifted" layer name
+```
+
+The matrices in the two dictionaries are matched by key. Inputs are converted to NumPy `float64` arrays for spectral calculations.
 
 ## API
 
-- layer_spectrum, effective_rank, layer_report, analyze_model,
-  find_bottlenecks (shared spectral base)
-- spectrum_distance(baseline, candidate, bins=16) - float >= 0
-- shift_report(baseline_layers, candidate_layers, bins=16) - per-layer
-  distances plus most_shifted
+- `layer_spectrum(matrix)` returns singular values in descending order. The input must be two-dimensional.
+- `effective_rank(matrix, energy=0.99)` returns the smallest count whose cumulative singular values reach the requested fraction. `energy` must be in `(0, 1]`.
+- `layer_report(matrix)` returns `shape`, `frobenius_norm`, `spectral_norm`, `condition_number`, and `effective_rank` for a non-empty two-dimensional matrix. Numerically singular matrices are reported with an infinite condition number.
+- `analyze_model(layers)` applies `layer_report` to each entry in a non-empty `{name: matrix}` dictionary.
+- `find_bottlenecks(reports, top_k=1)` returns names ordered by ascending effective rank; ties are ordered by name.
+- `spectrum_distance(baseline, candidate, bins=16)` returns a non-negative distance between normalized spectral profiles. `bins` must be at least 2.
+- `shift_report(baseline_layers, candidate_layers, bins=16)` returns distances for common names plus `most_shifted`. It raises `ValueError` if either dictionary is empty or there are no common names.
 
-## Honest results and limitations
+## Tests
 
-- The distance compares only the SHAPE of the spectral decay; overall
-  scale differences are deliberately ignored. Two matrices that differ
-  by a constant factor score 0.0.
-- A high distance says the spectra differ, not why, and not whether
-  task accuracy changed. No accuracy evaluation is included.
-- Layers are matched by name; renamed or new layers are silently
-  skipped (only common names are compared).
-- Quantile binning (default 16) smooths fine spectral detail.
+Run the test suite with:
+
+```bash
+python -m pytest -q
+```
+
+On the cloned repository commit, the suite completed with **17 passed**. The CI workflow is configured to run the tests on Python 3.10, 3.11, and 3.12; this local result does not establish the outcome of a separate hosted CI run.
+
+## Limitations
+
+- The comparison measures differences in the shape of singular-value profiles only; equal profiles under uniform rescaling have zero distance.
+- A distance does not explain the cause of a difference or establish that accuracy, task behavior, or data quality changed.
+- Only keys present in both layer dictionaries are compared. Added or removed names are not included in the report.
+- Quantile sampling (16 points by default) compresses the spectrum and can omit fine-grained details.
+- The module accepts matrices rather than model objects or activation streams; data extraction and interpretation are outside its scope.
 
 ## License
 
-MIT - see [LICENSE](LICENSE).
+The repository includes an MIT License. See [LICENSE](LICENSE) for the complete terms and copyright notice.
